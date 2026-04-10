@@ -531,6 +531,13 @@ def rows_requiring_color_refresh(
     ]
 
 
+def normalize_color_value(color: str) -> str:
+    normalized = scraper.clean_text(color).rstrip("：:")
+    if normalized in {"", "-", "--", "不明", "なし", "無し", "unknown", "Unknown"}:
+        return ""
+    return normalized
+
+
 def fetch_detail_html(url: str) -> str:
     request = Request(url, headers={"User-Agent": DEFAULT_USER_AGENT})
     with urlopen(request, timeout=60) as response:
@@ -570,11 +577,11 @@ def extract_detail_color(source: str, html: str) -> str:
     if source == "webike":
         color_node = soup.select_one(".motorcycle-color")
         if color_node:
-            return scraper.clean_text(color_node.get_text(" ", strip=True))
-        return extract_labeled_value(soup, ("カラー", "色", "車体色", "本体カラー"))
+            return normalize_color_value(color_node.get_text(" ", strip=True))
+        return normalize_color_value(extract_labeled_value(soup, ("カラー", "色", "車体色", "本体カラー")))
 
     if source == "8190":
-        return extract_labeled_value(soup, ("色", "カラー", "車体色"))
+        return normalize_color_value(extract_labeled_value(soup, ("色", "カラー", "車体色")))
 
     if source == "bikekan":
         for box in soup.select(".p-buy-product__box"):
@@ -587,14 +594,14 @@ def extract_detail_color(source: str, html: str) -> str:
             values = [scraper.clean_text(text) for text in box.stripped_strings]
             values = [value for value in values if value and value != "カラー"]
             if values:
-                return values[0]
-        return extract_labeled_value(soup, ("カラー", "色"))
+                return normalize_color_value(values[0])
+        return normalize_color_value(extract_labeled_value(soup, ("カラー", "色")))
 
     if source == "u-media":
-        return extract_labeled_value(soup, ("色", "カラー"))
+        return normalize_color_value(extract_labeled_value(soup, ("色", "カラー")))
 
     if source == "goobike":
-        return extract_labeled_value(soup, ("色系統", "車体色", "カラー", "色"))
+        return normalize_color_value(extract_labeled_value(soup, ("色系統", "車体色", "カラー", "色")))
 
     return ""
 
