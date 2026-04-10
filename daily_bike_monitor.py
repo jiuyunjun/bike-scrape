@@ -555,6 +555,7 @@ def normalize_color_value(color: str) -> str:
         "アトモスファイアブルーメタリック",
         "アトモスフィアブルーm",
         "アトモスフィア",
+        "ホワイトii",
         "blue",
         "ブルー",
         "ブルーii",
