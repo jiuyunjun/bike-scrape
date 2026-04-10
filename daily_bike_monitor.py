@@ -535,6 +535,56 @@ def normalize_color_value(color: str) -> str:
     normalized = scraper.clean_text(color).rstrip("：:")
     if normalized in {"", "-", "--", "不明", "なし", "無し", "unknown", "Unknown"}:
         return ""
+
+    lowered = normalized.lower()
+    red_aliases = (
+        "キャンディークロモスフィアレッド",
+        "キャンディクロモスフィアレッド",
+        "red",
+        "レッド",
+        "レッドii",
+        "赤",
+        "赤白",
+        "赤/白",
+        "白/赤",
+        "赤/白/黒",
+        "トリコロール",
+    )
+    blue_aliases = (
+        "アトモスフィアブルーメタリック",
+        "アトモスファイアブルーメタリック",
+        "アトモスフィアブルーm",
+        "アトモスフィア",
+        "blue",
+        "ブルー",
+        "ブルーii",
+        "ブルー?",
+        "青",
+        "青/白",
+        "白/青",
+        "青/赤/白",
+    )
+    black_aliases = (
+        "ダークネスブラックメタリック",
+        "black",
+        "ブラック",
+        "黒",
+    )
+    silver_aliases = (
+        "マットベータシルバーメタリック",
+        "silver",
+        "シルバー",
+        "艶消し銀",
+    )
+
+    if lowered in red_aliases:
+        return "キャンディークロモスフィアレッド（红白黑）"
+    if lowered in blue_aliases:
+        return "アトモスフィアブルーメタリック（蓝白）"
+    if lowered in black_aliases:
+        return "ダークネスブラックメタリック（黑）"
+    if lowered in silver_aliases:
+        return "マットベータシルバーメタリック（银色）"
     return normalized
 
 
