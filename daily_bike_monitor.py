@@ -23,6 +23,107 @@ DIFF_ROOT = DATA_ROOT / "diffs"
 RAW_ROOT = DATA_ROOT / "raw_html"
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 MIN_COMPLETENESS_RATIO = 0.7
+PREFECTURES = (
+    "北海道",
+    "青森県",
+    "岩手県",
+    "宮城県",
+    "秋田県",
+    "山形県",
+    "福島県",
+    "茨城県",
+    "栃木県",
+    "群馬県",
+    "埼玉県",
+    "千葉県",
+    "東京都",
+    "神奈川県",
+    "新潟県",
+    "富山県",
+    "石川県",
+    "福井県",
+    "山梨県",
+    "長野県",
+    "岐阜県",
+    "静岡県",
+    "愛知県",
+    "三重県",
+    "滋賀県",
+    "京都府",
+    "大阪府",
+    "兵庫県",
+    "奈良県",
+    "和歌山県",
+    "鳥取県",
+    "島根県",
+    "岡山県",
+    "広島県",
+    "山口県",
+    "徳島県",
+    "香川県",
+    "愛媛県",
+    "高知県",
+    "福岡県",
+    "佐賀県",
+    "長崎県",
+    "熊本県",
+    "大分県",
+    "宮崎県",
+    "鹿児島県",
+    "沖縄県",
+)
+STORE_PREFECTURE_MAP = {
+    "ユーメディア川崎": "神奈川県",
+    "ユーメディア横浜新山下": "神奈川県",
+    "ユーメディア湘南": "神奈川県",
+    "ユーメディア相模原": "神奈川県",
+    "ユーメディア藤沢": "神奈川県",
+    "ユーメディア横浜青葉": "神奈川県",
+    "ユーメディア厚木": "神奈川県",
+    "ユーメディア小田原": "神奈川県",
+    "ホンダドリーム相模原": "神奈川県",
+    "川口店": "埼玉県",
+    "小牧店": "愛知県",
+    "広島店第2ショールーム": "広島県",
+    "東松山店": "埼玉県",
+    "浜松有玉店": "静岡県",
+    "大宮店": "埼玉県",
+    "座間店": "神奈川県",
+    "上熊本店": "熊本県",
+    "岡山店": "岡山県",
+    "足利店": "栃木県",
+    "半田店": "愛知県",
+    "小倉店": "福岡県",
+    "茨木鮎川店": "大阪府",
+    "名古屋守山店": "愛知県",
+    "神戸伊川谷店": "兵庫県",
+    "新潟中央店": "新潟県",
+    "川崎店": "神奈川県",
+    "三郷上彦名店": "埼玉県",
+    "札幌店": "北海道",
+    "名古屋みなと店": "愛知県",
+    "入間店": "埼玉県",
+    "北九州店": "福岡県",
+    "豊橋店": "愛知県",
+    "港南店": "神奈川県",
+    "草加店": "埼玉県",
+    "富田林店": "大阪府",
+    "千葉鶴沢店": "千葉県",
+    "富士店": "静岡県",
+    "熊本本山店": "熊本県",
+    "天白店": "愛知県",
+    "伏見店": "京都府",
+    "港北ニュータウン店": "神奈川県",
+    "前橋店": "群馬県",
+    "新潟店": "新潟県",
+    "蕨店": "埼玉県",
+    "岐阜長良店": "岐阜県",
+    "浦和店": "埼玉県",
+    "仙台南店": "宮城県",
+    "久留米インター店": "福岡県",
+    "門真店": "大阪府",
+    "小山店": "栃木県",
+}
 
 
 @dataclass(frozen=True)
@@ -114,13 +215,14 @@ def clean_rows(rows: list[dict], min_year: int = 2019) -> list[dict]:
     filtered: list[dict] = []
     seen: set[str] = set()
     for row in rows:
-        if not scraper.is_target_row(row, min_year=min_year):
+        normalized_row = normalize_row_fields(row)
+        if not scraper.is_target_row(normalized_row, min_year=min_year):
             continue
-        key = row_identity(row)
+        key = row_identity(normalized_row)
         if key in seen:
             continue
         seen.add(key)
-        filtered.append(add_identity_fields(row))
+        filtered.append(add_identity_fields(normalized_row))
     filtered.sort(key=lambda item: (item["来源"], item["listing_id"], item["url"]))
     return filtered
 
@@ -132,6 +234,52 @@ def add_identity_fields(row: dict) -> dict:
     copied["listing_id"] = listing_id
     copied["listing_key"] = f"{source}:{listing_id}" if listing_id else row_identity(copied)
     return copied
+
+
+def normalize_row_fields(row: dict) -> dict:
+    copied = dict(row)
+    copied["走行距離"] = normalize_mileage_value(str(copied.get("走行距離", "")))
+    copied["販売店場所"] = scraper.clean_text(str(copied.get("販売店場所", "")))
+    copied["販売店都道府県"] = normalize_prefecture_value(
+        str(copied.get("販売店都道府県", "")),
+        copied["販売店場所"],
+    )
+
+    listing_key = scraper.clean_text(str(copied.get("listing_key", "")))
+    if listing_key and ":" in listing_key:
+        copied["listing_id"] = listing_key.split(":", 1)[1]
+    return copied
+
+
+def normalize_mileage_value(value: str) -> str:
+    text = scraper.clean_text(value)
+    if not text:
+        return "N/A"
+    if any(token in text for token in ("走行不明", "不明", "unknown", "Unknown", "UNKNOWN")):
+        return "N/A"
+    digits = scraper.re.sub(r"\D", "", text)
+    return digits or "N/A"
+
+
+def extract_prefecture_from_text(text: str) -> str:
+    cleaned = scraper.clean_text(text)
+    for prefecture in PREFECTURES:
+        if prefecture in cleaned:
+            return prefecture
+    return ""
+
+
+def normalize_prefecture_value(existing_value: str, shop_text: str) -> str:
+    existing = extract_prefecture_from_text(existing_value)
+    if existing:
+        return existing
+
+    extracted = extract_prefecture_from_text(shop_text)
+    if extracted:
+        return extracted
+
+    cleaned_shop = scraper.clean_text(shop_text)
+    return STORE_PREFECTURE_MAP.get(cleaned_shop, "")
 
 
 def row_identity(row: dict) -> str:
@@ -725,6 +873,7 @@ def inventory_fieldnames() -> list[str]:
         "走行距離",
         "色",
         "販売店場所",
+        "販売店都道府県",
         "url",
         "本体価格",
         "総価格",
