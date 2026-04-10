@@ -310,6 +310,16 @@ def parse_goobike(soup: BeautifulSoup) -> list[dict]:
         area_node = card.select_one(".name_icon")
         if area_node:
             shop_address = clean_text(area_node.get_text(" ", strip=True))
+        if not shop_name or not shop_address:
+            store_name = card.select_one(".inquiryBox .store_name")
+            if store_name:
+                prefix = clean_text(store_name.contents[0]) if store_name.contents else ""
+                span = store_name.select_one("span")
+                suffix = clean_text(span.get_text(" ", strip=True)) if span else ""
+                if not shop_address:
+                    shop_address = prefix
+                if not shop_name:
+                    shop_name = suffix
         shop = clean_text(" ".join(x for x in [shop_name, shop_address] if x))
 
         rows.append(
