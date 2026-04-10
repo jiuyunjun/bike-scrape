@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup, Tag
 BASE_URL = "https://moto.webike.net"
 UMEDIA_BASE_URL = "https://u-media.ne.jp/bike/"
 BIKENET8190_BASE_URL = "https://www.8190.jp"
+BDS_BIKESENSOR_BASE_URL = "https://www.bds-bikesensor.net"
 DATA_DIR = "data"
 OUTPUT_CSV = "cb400sf_2019plus.csv"
 
@@ -316,6 +317,74 @@ def parse_goobike(soup: BeautifulSoup) -> list[dict]:
     return rows
 
 
+def parse_bds_bikesensor(soup: BeautifulSoup) -> list[dict]:
+    rows = []
+    for card in soup.select("li.c-search_block_list_item.type_bike"):
+        detail_a = card.select_one('a[href*="/bike/detail/"]')
+        if not detail_a:
+            continue
+
+        maker = clean_text(card.select_one(".c-search_block_text h2").get_text(" ", strip=True)) if card.select_one(".c-search_block_text h2") else ""
+        title_node = card.select_one("h2.c-search_block_title a")
+        title = clean_text(title_node.get_text(" ", strip=True)) if title_node else ""
+        if maker and maker not in title:
+            title = f"{maker} {title}".strip()
+
+        lead_node = card.select_one(".c-search_block_lead a")
+        lead = clean_text(lead_node.get_text(" ", strip=True)) if lead_node else ""
+        if lead:
+            title = f"{title} {lead}".strip()
+
+        body_price = ""
+        total_price = ""
+        for price_block in card.select(".c-search_block_price"):
+            label = clean_text(price_block.select_one(".c-search_block_price_title").get_text(" ", strip=True)) if price_block.select_one(".c-search_block_price_title") else ""
+            value = clean_text(price_block.select_one(".c-search_block_price_text").get_text(" ", strip=True)) if price_block.select_one(".c-search_block_price_text") else ""
+            if "本体価格" in label:
+                body_price = value
+            elif "お支払総額" in label:
+                total_price = value
+
+        year_text = ""
+        mileage = ""
+        region = ""
+        for col in card.select(".c-search_status_col"):
+            head = clean_text(col.select_one(".c-search_status_head").get_text(" ", strip=True)) if col.select_one(".c-search_status_head") else ""
+            content = clean_text(col.select_one(".c-search_status_content").get_text(" ", strip=True)) if col.select_one(".c-search_status_content") else ""
+            if head == "モデル年":
+                year_text = content
+            elif head == "距離":
+                mileage = content
+            elif head == "地域":
+                region = content
+
+        shop_name = clean_text(card.select_one(".c-search_block_bottom_title01").get_text(" ", strip=True)) if card.select_one(".c-search_block_bottom_title01") else ""
+        shop_address = ""
+        for row in card.select(".c-search_block_bottom_info tr"):
+            th = clean_text(row.select_one("th").get_text(" ", strip=True)) if row.select_one("th") else ""
+            td = clean_text(row.select_one("td").get_text(" ", strip=True)) if row.select_one("td") else ""
+            if th == "住所":
+                shop_address = td
+                break
+
+        shop = clean_text(" ".join(part for part in [shop_address or region, shop_name] if part))
+
+        rows.append(
+            row_dict(
+                "bds-bikesensor",
+                title,
+                year_text,
+                mileage,
+                "",
+                shop,
+                urljoin(BDS_BIKESENSOR_BASE_URL, detail_a["href"]),
+                body_price,
+                total_price,
+            )
+        )
+    return rows
+
+
 def parse_mhtml_file(path: Path) -> list[dict]:
     snapshot_url, html = read_mhtml_html(path)
     soup = BeautifulSoup(html, "html.parser")
@@ -330,6 +399,8 @@ def parse_mhtml_file(path: Path) -> list[dict]:
         return parse_8190(soup)
     if "goobike.com" in snapshot_url:
         return parse_goobike(soup)
+    if "bds-bikesensor.net" in snapshot_url:
+        return parse_bds_bikesensor(soup)
 
     return []
 

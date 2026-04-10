@@ -190,6 +190,15 @@ SITE_CONFIGS: list[SiteConfig] = [
         search_submit="#searchAreaBtn",
         max_pages=6,
     ),
+    SiteConfig(
+        name="bds-bikesensor",
+        homepage="https://www.bds-bikesensor.net/",
+        initial_url="https://www.bds-bikesensor.net/bike?firstyearMin=2019&freeword=CB400SF",
+        ready_selector="li.c-search_block_list_item.type_bike",
+        parser_name="bds-bikesensor",
+        page_param="page",
+        max_pages=8,
+    ),
 ]
 
 
@@ -198,6 +207,7 @@ PARSERS: dict[str, Callable[[BeautifulSoup], list[dict]]] = {
     "8190": scraper.parse_8190,
     "u-media": scraper.parse_umedia,
     "bikekan": scraper.parse_bikekan,
+    "bds-bikesensor": scraper.parse_bds_bikesensor,
 }
 
 
@@ -312,6 +322,7 @@ def extract_listing_id(source: str, url: str) -> str:
         "8190": r"/wish/ds/bike/(\d+)/?",
         "bikekan": r"/buy/detail/(\d+)/?",
         "goobike": r"/spread/([A-Z0-9]+)/",
+        "bds-bikesensor": r"/bike/detail/(\d+)/?",
     }
     pattern = patterns.get(source)
     if pattern:
