@@ -1,6 +1,7 @@
 import csv
 import email
 import re
+import unicodedata
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import urljoin
@@ -22,6 +23,11 @@ def clean_text(text: str) -> str:
     text = text.replace("\xa0", " ")
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
+
+def normalized_model_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKC", clean_text(text)).lower()
+    return re.sub(r"[^a-z0-9]+", "", normalized)
 
 
 def extract_year(text: str):
@@ -406,7 +412,7 @@ def parse_mhtml_file(path: Path) -> list[dict]:
 
 
 def is_target_row(row: dict, min_year: int = 2019) -> bool:
-    title = clean_text(str(row.get("タイトル", ""))).lower()
+    title = normalized_model_text(str(row.get("タイトル", "")))
     year = row.get("年式")
     return "cb400" in title and isinstance(year, int) and year >= min_year
 
