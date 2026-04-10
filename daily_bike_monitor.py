@@ -703,6 +703,7 @@ def normalize_color_value(color: str) -> str:
     red_aliases = (
         "キャンディークロモスフィアレッド",
         "キャンディクロモスフィアレッド",
+        "赤系",
         "red",
         "レッド",
         "レッドii",
@@ -718,6 +719,7 @@ def normalize_color_value(color: str) -> str:
         "アトモスファイアブルーメタリック",
         "アトモスフィアブルーm",
         "アトモスフィア",
+        "青系",
         "ホワイトii",
         "blue",
         "ブルー",
@@ -730,12 +732,15 @@ def normalize_color_value(color: str) -> str:
     )
     black_aliases = (
         "ダークネスブラックメタリック",
+        "黒系",
         "black",
         "ブラック",
         "黒",
     )
     silver_aliases = (
         "マットベータシルバーメタリック",
+        "シルバー系",
+        "銀系",
         "silver",
         "シルバー",
         "艶消し銀",
@@ -816,6 +821,9 @@ def extract_detail_color(source: str, html: str) -> str:
 
     if source == "goobike":
         return normalize_color_value(extract_labeled_value(soup, ("色系統", "車体色", "カラー", "色")))
+
+    if source == "bds-bikesensor":
+        return normalize_color_value(extract_labeled_value(soup, ("カラー", "色", "車体色")))
 
     return ""
 
