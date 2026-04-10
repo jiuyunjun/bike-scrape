@@ -217,6 +217,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--headful", action="store_true", help="Run browser in headed mode.")
     parser.add_argument("--site", action="append", choices=[cfg.name for cfg in SITE_CONFIGS], help="Only run selected site(s).")
     parser.add_argument("--save-raw-html", action="store_true", help="Save page HTML for debugging.")
+    parser.add_argument("--list-only", action="store_true", help="Only scrape list pages and skip detail-page color refresh.")
     parser.add_argument(
         "--full-color-refresh",
         action="store_true",
@@ -262,6 +263,9 @@ def normalize_row_fields(row: dict) -> dict:
     listing_key = scraper.clean_text(str(copied.get("listing_key", "")))
     if listing_key and ":" in listing_key:
         copied["listing_id"] = listing_key.split(":", 1)[1]
+    copied["掲載状態"] = scraper.clean_text(str(copied.get("掲載状態", ""))) or "active"
+    copied["初回確認日"] = scraper.clean_text(str(copied.get("初回確認日", "")))
+    copied["最終確認日"] = scraper.clean_text(str(copied.get("最終確認日", "")))
     return copied
 
 
@@ -656,6 +660,36 @@ def build_diff_rows(snapshot_date: str, previous_rows: list[dict], current_rows:
     return diff_rows, summary
 
 
+def active_rows(rows: list[dict]) -> list[dict]:
+    return [row for row in rows if scraper.clean_text(str(row.get("掲載状態", "active"))) != "inactive"]
+
+
+def merge_inventory_rows(snapshot_date: str, previous_rows: list[dict], current_active_rows: list[dict]) -> list[dict]:
+    previous_map = {row["listing_key"]: normalize_row_fields(row) for row in previous_rows}
+    current_map = {row["listing_key"]: normalize_row_fields(row) for row in current_active_rows}
+    merged: list[dict] = []
+
+    for key, row in current_map.items():
+        previous_row = previous_map.get(key, {})
+        current = dict(row)
+        current["掲載状態"] = "active"
+        current["初回確認日"] = scraper.clean_text(str(previous_row.get("初回確認日", ""))) or snapshot_date
+        current["最終確認日"] = snapshot_date
+        merged.append(current)
+
+    for key, row in previous_map.items():
+        if key in current_map:
+            continue
+        inactive = dict(row)
+        inactive["掲載状態"] = "inactive"
+        inactive["初回確認日"] = scraper.clean_text(str(inactive.get("初回確認日", ""))) or snapshot_date
+        inactive["最終確認日"] = scraper.clean_text(str(inactive.get("最終確認日", ""))) or snapshot_date
+        merged.append(inactive)
+
+    merged.sort(key=lambda item: (item["掲載状態"], item["来源"], item["listing_id"], item["url"]))
+    return merged
+
+
 def copy_previous_colors(previous_rows: list[dict], current_rows: list[dict]) -> int:
     previous_map = {row["listing_key"]: row for row in previous_rows}
     copied = 0
@@ -891,6 +925,9 @@ def inventory_fieldnames() -> list[str]:
         "来源",
         "listing_id",
         "listing_key",
+        "掲載状態",
+        "初回確認日",
+        "最終確認日",
         "タイトル",
         "年式",
         "走行距離",
@@ -935,8 +972,9 @@ def run(args: argparse.Namespace) -> int:
 
     previous_snapshot = latest_previous_snapshot(snapshot_date)
     previous_rows = read_snapshot_csv(previous_snapshot) if previous_snapshot else []
+    previous_active_rows = active_rows(previous_rows)
     previous_by_source: dict[str, list[dict]] = {}
-    for row in previous_rows:
+    for row in previous_active_rows:
         previous_by_source.setdefault(row["来源"], []).append(row)
 
     all_rows: list[dict] = []
@@ -980,30 +1018,37 @@ def run(args: argparse.Namespace) -> int:
             browser.close()
 
     cleaned_rows = clean_rows(all_rows, min_year=2019)
-    copied_colors = copy_previous_colors(previous_rows, cleaned_rows)
+    copied_colors = copy_previous_colors(previous_active_rows, cleaned_rows)
     if copied_colors:
         print(f"[color] copied from previous snapshot: {copied_colors}")
 
-    refreshed_colors, color_errors = enrich_colors_from_details(
-        cleaned_rows,
-        previous_rows,
-        full_color_refresh=args.full_color_refresh,
-    )
-    if refreshed_colors:
-        print(f"[color] refreshed from detail pages: {refreshed_colors}")
-    errors.extend(color_errors)
+    if args.list_only:
+        refreshed_colors = 0
+        color_errors = []
+        print("[color] skipped detail-page refresh (--list-only)")
+    else:
+        refreshed_colors, color_errors = enrich_colors_from_details(
+            cleaned_rows,
+            previous_active_rows,
+            full_color_refresh=args.full_color_refresh,
+        )
+        if refreshed_colors:
+            print(f"[color] refreshed from detail pages: {refreshed_colors}")
+        errors.extend(color_errors)
+
+    merged_rows = merge_inventory_rows(snapshot_date, previous_rows, cleaned_rows)
 
     snapshot_path = SNAPSHOT_ROOT / snapshot_date / "inventory.csv"
-    write_csv(snapshot_path, cleaned_rows, inventory_fieldnames())
+    write_csv(snapshot_path, merged_rows, inventory_fieldnames())
 
-    diff_rows, summary = build_diff_rows(snapshot_date, previous_rows, cleaned_rows)
+    diff_rows, summary = build_diff_rows(snapshot_date, previous_active_rows, cleaned_rows)
 
     diff_dir = DIFF_ROOT / snapshot_date
     write_csv(diff_dir / "diff.csv", diff_rows, diff_fieldnames())
     write_summary(diff_dir / "summary.txt", snapshot_date, summary, len(cleaned_rows), previous_snapshot)
     write_errors(diff_dir / "errors.txt", errors)
 
-    print(f"saved inventory: {snapshot_path} ({len(cleaned_rows)} rows)")
+    print(f"saved inventory: {snapshot_path} ({len(merged_rows)} rows, active={len(cleaned_rows)})")
     print(f"saved diff: {diff_dir / 'diff.csv'} ({len(diff_rows)} rows)")
     print(
         "summary:",
