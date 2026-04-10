@@ -30,6 +30,11 @@ def normalized_model_text(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", normalized)
 
 
+def normalized_japanese_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKC", clean_text(text))
+    return re.sub(r"\s+", "", normalized)
+
+
 def extract_year(text: str):
     if not text:
         return None
@@ -412,9 +417,13 @@ def parse_mhtml_file(path: Path) -> list[dict]:
 
 
 def is_target_row(row: dict, min_year: int = 2019) -> bool:
-    title = normalized_model_text(str(row.get("タイトル", "")))
+    raw_title = str(row.get("タイトル", ""))
+    title = normalized_model_text(raw_title)
+    title_ja = normalized_japanese_text(raw_title)
     year = row.get("年式")
-    return "cb400" in title and isinstance(year, int) and year >= min_year
+    matches_cb400 = "cb400" in title
+    matches_super_four = "スーパーフォア" in title_ja and "cb1300" not in title
+    return (matches_cb400 or matches_super_four) and isinstance(year, int) and year >= min_year
 
 
 def row_key(row: dict) -> tuple:
